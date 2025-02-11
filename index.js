@@ -13,6 +13,12 @@ class NodeGoPinger {
         this.bearerToken = token;
         this.agent = proxyUrl ? this.createProxyAgent(proxyUrl) : null;
         this.lastPingTimestamp = 0;
+        this.ip = this.getIp();
+    }
+
+    async getIp() {
+        const response = await axios.get('http://httpbin.org/ip', { httpAgent: this.agent });
+        this.ip = response.data?.origin;
     }
 
     createProxyAgent(proxyUrl) {
@@ -38,7 +44,7 @@ class NodeGoPinger {
                 };
             }
         } catch (error) {
-            console.error(chalk.red('Invalid proxy URL:'), error.message);
+            console.error(chalk.red('Invalid proxy URL:'), error.message, proxyUrl);
             return null;
         }
     }
@@ -137,15 +143,13 @@ class MultiAccountPinger {
                 .split('\n')
                 .filter(line => line.trim());
             
-            const proxyData = fs.existsSync('proxies.txt') 
-                ? fs.readFileSync('proxies.txt', 'utf8')
-                    .split('\n')
-                    .filter(line => line.trim())
+            const proxyConfig = fs.existsSync('proxy.json')
+                ? JSON.parse(fs.readFileSync('proxy.json', 'utf8'))
                 : [];
             
             return accountData.map((token, index) => ({
                 token: token.trim(),
-                proxy: proxyData[index] || null
+                proxies: proxyConfig[index] ? proxyConfig[index] : []
             }));
         } catch (error) {
             console.error(chalk.red('Error reading accounts:'), error);
@@ -154,34 +158,29 @@ class MultiAccountPinger {
     }
 
     async processSingleAccount(account) {
-        const pinger = new NodeGoPinger(account.token, account.proxy);
-        
-        try {
-            const userInfo = await pinger.getUserInfo();
-            if (!userInfo) return;
-
-            const pingResponse = await pinger.ping();
-
-            console.log(chalk.white('='.repeat(50)));
-            console.log(chalk.cyan(`Username: ${userInfo.username}`));
-            console.log(chalk.yellow(`Email: ${userInfo.email}`));
-            
-            userInfo.nodes.forEach((node, index) => {
-                console.log(chalk.magenta(`\nNode ${index + 1}:`));
-                console.log(`  ID: ${node.id}`);
-                console.log(`  Total Points: ${node.totalPoint}`);
-                console.log(`  Today's Points: ${node.todayPoint}`);
-                console.log(`  Status: ${node.isActive ? 'Active' : 'Inactive'}`);
-            });
-            
-            console.log(chalk.green(`\nTotal Points: ${userInfo.totalPoint}`));
-            console.log(chalk.green(`Status Code: ${pingResponse.statusCode}`));
-            console.log(chalk.green(`Ping Message: ${pingResponse.message}`));
-            console.log(chalk.white(`Metadata ID: ${pingResponse.metadataId}`));
-            console.log(chalk.white('='.repeat(50)));
-        } catch (error) {
-            console.error(chalk.red(`Error processing account: ${error.message}`));
+        console.log(chalk.white('='.repeat(50)));
+        console.log(chalk.cyan(`Processing account with ${account.proxies.length} proxies`));
+        for (const proxy of account.proxies) {
+            const pinger = new NodeGoPinger(account.token, proxy);
+            try {
+                const userInfo = await pinger.getUserInfo();
+                if (!userInfo) continue;
+                console.log(chalk.cyan(`\nProxy: ${proxy}`));
+                console.log(chalk.yellow(`Email: ${userInfo.email}`));
+                console.log(chalk.yellow(`Nodes Length: ${userInfo.nodes?.length}`));
+                console.log(chalk.green(`\nTotal Points: ${userInfo.totalPoint}`));
+                console.log(chalk.yellow(`Start Ping Ip: ${pinger.ip}`));
+                const pingResponse = await pinger.ping();
+                console.log(chalk.green(`Status Code: ${pingResponse.statusCode}`));
+                console.log(chalk.green(`Ping Message: ${pingResponse.message}`));
+                console.log(chalk.white(`Metadata ID: ${pingResponse.metadataId}`));
+                
+            } catch (error) {
+                console.error(chalk.red(`Error with proxy ${proxy}: ${error.message}`));
+            }
+            await new Promise(resolve => setTimeout(resolve, 5000));
         }
+        console.log(chalk.white('='.repeat(50)));
     }
 
     async runPinger() {
