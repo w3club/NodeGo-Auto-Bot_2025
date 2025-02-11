@@ -40,14 +40,18 @@ npm install
      token3
      ```
 
-2. (Optional) Create `proxies.txt` in the project root:
+2. (Optional) Create `proxy.json` in the project root:
    - Add one proxy per line
    - Supports both HTTP and SOCKS proxies
    - Example:
      ```
-     http://ip1:port1
-     socks5://ip2:port2
-     socks4://ip3:port3
+     [
+      [
+         'proxy1',
+         'proxy2',
+         ...
+      ]
+     ]
      ```
 
 ## Usage
@@ -59,7 +63,7 @@ node index.js
 
 The bot will:
 - Load all accounts from data.txt
-- Associate proxies from proxies.txt if available
+- Associate proxies from proxy.json if available
 - Start periodic pinging every 15 seconds
 - Display detailed status information for each account
 
